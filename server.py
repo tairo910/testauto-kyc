@@ -14,6 +14,16 @@ from flask_cors import CORS
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+# 加载 .env 文件
+env_file = os.path.join(os.path.dirname(__file__), '.env')
+if os.path.exists(env_file):
+    with open(env_file, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                os.environ.setdefault(key.strip(), value.strip())
+
 app = Flask(__name__)
 CORS(app)
 
