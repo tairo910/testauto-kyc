@@ -6,6 +6,9 @@
 
 # ==================== 页面1：用户创建 ====================
 
+# 登录账号
+LOGIN_ACCOUNT = "sunwnejiao@staff.sinaft.com"
+
 # 登录密码
 LOGIN_PASSWORD = "Test@1234"
 
