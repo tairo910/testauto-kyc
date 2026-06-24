@@ -10,7 +10,7 @@
 LOGIN_ACCOUNT = "sunwnejiao@staff.sinaft.com"
 
 # 登录兜底密码
-LOGIN_PASSWORD = "Test@1234"
+LOGIN_PASSWORD = "sina@1234"
 
 # 经办人信息
 OPERATOR_NAME = "造数"  # 经办人姓名

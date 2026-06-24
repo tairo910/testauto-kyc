@@ -6,7 +6,7 @@
 
 # ==================== 页面1：用户创建 ====================
 
-LOGIN_PASSWORD = "Test@1234"
+LOGIN_PASSWORD = "sina@1234"
 
 OPERATOR_NAME = "造数"
 OPERATOR_PHONE = "19447541989"

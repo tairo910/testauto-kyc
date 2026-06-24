@@ -620,7 +620,7 @@
                 </div>
                 <div class="info-card">
                     <div class="info-label">登录密码</div>
-                    <div class="info-value">Test@1234</div>
+                    <div class="info-value">sina@1234</div>
                 </div>
                 <div class="info-card">
                     <div class="info-label">注册邮箱</div>
@@ -682,9 +682,20 @@
         }
 
         function generateTestData() {
-            const timestamp = Date.now();
-            const account = `testuser_${timestamp.toString(36)}`;
-            const password = 'Test@1234';
+            const now = new Date();
+            const timeStr = now.getFullYear().toString() + 
+                          String(now.getMonth() + 1).padStart(2, '0') + 
+                          String(now.getDate()).padStart(2, '0') + 
+                          String(now.getHours()).padStart(2, '0') + 
+                          String(now.getMinutes()).padStart(2, '0');
+            
+            const businessTypeText = document.getElementById('businessType').textContent;
+            const businessNum = businessTypeText.includes('业务1') ? '1' : 
+                               businessTypeText.includes('业务2') ? '2' : 
+                               businessTypeText.includes('业务3') ? '3' : '4';
+            
+            const account = `babwebyw${businessNum}1${timeStr}`;
+            const password = 'sina@1234';
             const email = `${account}@${['163.com', 'qq.com', 'gmail.com', 'sina.com'][Math.floor(Math.random() * 4)]}`;
             
             const testData = {
