@@ -9,7 +9,7 @@ import sys
 import json
 import subprocess
 import threading
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -261,6 +261,29 @@ def get_sql_params():
 def test_api():
     """测试API是否正常"""
     return jsonify({'success': True, 'message': '后端服务运行正常'})
+
+@app.route('/api/getUserId', methods=['POST'])
+def get_user_id():
+    """根据邮箱查询审批任务ID"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '')
+        if not email:
+            return jsonify({'success': False, 'message': '邮箱不能为空'})
+        
+        from src.services.database_service import get_audit_task_id_by_email
+        audit_task_id = get_audit_task_id_by_email(email)
+        if audit_task_id:
+            return jsonify({'success': True, 'audit_task_id': audit_task_id})
+        else:
+            return jsonify({'success': False, 'message': '未查询到审批任务ID'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'查询失败: {str(e)}'}), 500
+
+@app.route('/', methods=['GET'])
+def index():
+    """提供前端页面"""
+    return send_from_directory(os.path.dirname(__file__), 'index.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)

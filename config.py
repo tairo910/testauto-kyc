@@ -6,10 +6,10 @@
 
 # ==================== 页面1：用户创建 ====================
 
-# 登录账号
+# 登录兜底账号
 LOGIN_ACCOUNT = "sunwnejiao@staff.sinaft.com"
 
-# 登录密码
+# 登录兜底密码
 LOGIN_PASSWORD = "Test@1234"
 
 # 经办人信息

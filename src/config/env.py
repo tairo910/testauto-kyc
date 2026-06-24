@@ -8,7 +8,7 @@
 
 ENVIRONMENT = "test"
 
-API_URL = "https://e.pay.sina.com.cn"
+API_URL = "http://e.pay.sina.com.cn"
 
 # ==================== 浏览器配置 ====================
 
