@@ -2,10 +2,21 @@
 """
 Guardian系统统一登录平台 - 自动化登录脚本
 登录地址: https://guardian.weibopay.com/uni-login/login
+
+用法:
+    python merchant_access_approval.py --id 6337
+    python merchant_access_approval.py -i 1234
+
+参数:
+    --id, -i:  申请ID（必填）
+    --username, -u:  登录用户名（默认: liuchunen）
+    --password, -p:  登录密码（默认: Abc@1234）
+    --help, -h:  显示帮助信息
 """
 
 import sys
 import os
+import argparse
 import time
 from datetime import datetime
 
@@ -14,23 +25,57 @@ sys.path.insert(0, os.path.dirname(__file__))
 from playwright.sync_api import sync_playwright
 
 LOGIN_URL = "https://guardian.weibopay.com/uni-login/login"
-USERNAME = "liuchunen"
-PASSWORD = "Abc@1234"
 SYSTEM_NAME = "商户准入系统"
 
 WAIT_TIME_SHORT = 300
 WAIT_TIME_NORMAL = 1000
 WAIT_TIME_LONG = 2000
 
+
+def parse_args():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(
+        description='Guardian系统商户准入审批自动化脚本',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+    python3 merchant_access_approval.py 6337
+    python3 merchant_access_approval.py 1234 -u admin -p Secret123
+        """
+    )
+    
+    parser.add_argument(
+        'id',
+        type=str,
+        help='申请ID（必填）'
+    )
+    
+    parser.add_argument(
+        '-u', '--username',
+        type=str,
+        default='liuchunen',
+        help='登录用户名（默认: liuchunen）'
+    )
+    
+    parser.add_argument(
+        '-p', '--password',
+        type=str,
+        default='Abc@1234',
+        help='登录密码（默认: Abc@1234）'
+    )
+    
+    return parser.parse_args()
+
 def get_screenshot_path(prefix):
     screenshot_dir = os.path.join(os.path.dirname(__file__), 'screenshots')
     os.makedirs(screenshot_dir, exist_ok=True)
     return os.path.join(screenshot_dir, f"{prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
 
-def login_guardian():
+def login_guardian(username, password, target_id):
     print("=== Guardian系统统一登录 ===")
     print(f"登录地址: {LOGIN_URL}")
-    print(f"用户名: {USERNAME}")
+    print(f"用户名: {username}")
+    print(f"申请ID: {target_id}")
     print(f"选择系统: {SYSTEM_NAME}")
     print("=" * 50)
     
@@ -52,13 +97,13 @@ def login_guardian():
             
             print("步骤2: 输入用户名")
             username_input = page.locator('input[type="text"]').first
-            username_input.fill(USERNAME)
-            print(f"  已输入用户名: {USERNAME}")
+            username_input.fill(username)
+            print(f"  已输入用户名: {username}")
             page.wait_for_timeout(WAIT_TIME_SHORT)
             
             print("步骤3: 输入密码")
             password_input = page.locator('input[type="password"]').first
-            password_input.fill(PASSWORD)
+            password_input.fill(password)
             print("  已输入密码")
             page.wait_for_timeout(WAIT_TIME_SHORT)
             
@@ -260,24 +305,90 @@ def login_guardian():
                 except Exception as e:
                     print(f"  ⚠️ 点击商户准入管理子菜单失败: {e}")
                 
-                # 步骤9: 查询申请ID为6337的申请
-                target_id = "6337"
+                # 步骤9: 查询申请ID
                 print(f"\n步骤9: 查询申请ID为 {target_id} 的申请")
                 
                 try:
-                    # 找到搜索框并输入申请ID
-                    search_input = page.locator('input[type="text"]').first
-                    search_input.fill(target_id)
-                    print(f"  已在搜索框输入申请ID: {target_id}")
+                    # 先截图查看页面状态
+                    page.screenshot(path=get_screenshot_path("step9_search_page"), full_page=True)
+                    
+                    # 使用JavaScript精确查找搜索框（通过placeholder或位置）
+                    result = page.evaluate('''(targetId) => {
+                        const inputs = document.querySelectorAll('input[type="text"]');
+                        let searchInput = null;
+                        
+                        // 方法1: 通过placeholder查找
+                        for (let input of inputs) {
+                            const placeholder = (input.placeholder || '').toLowerCase();
+                            if (placeholder.includes('申请') || placeholder.includes('id') || placeholder.includes('搜索') || placeholder.includes('查询')) {
+                                searchInput = input;
+                                break;
+                            }
+                        }
+                        
+                        // 方法2: 如果没找到，找第一个可见的输入框
+                        if (!searchInput) {
+                            for (let input of inputs) {
+                                if (input.offsetParent !== null) { // 可见元素
+                                    searchInput = input;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (searchInput) {
+                            searchInput.value = '';
+                            searchInput.value = targetId;
+                            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            searchInput.dispatchEvent(new Event('change', { bubbles: true }));
+                            return { success: true, placeholder: searchInput.placeholder || 'none' };
+                        }
+                        return { success: false };
+                    }''', target_id)
+                    
+                    if result and result.get('success'):
+                        print(f"  ✅ 已在搜索框输入申请ID: {target_id} (placeholder: {result.get('placeholder')})")
+                    else:
+                        # 备用：Playwright方式
+                        search_input = page.locator('input[type="text"]').first
+                        search_input.fill(target_id)
+                        print(f"  ✅ 通过Playwright输入申请ID: {target_id}")
+                    
+                    page.wait_for_timeout(WAIT_TIME_SHORT)
                     
                     # 点击查询按钮
-                    search_btn = page.locator('text=查询').first
-                    search_btn.click(timeout=3000)
-                    print("  已点击查询按钮")
+                    search_clicked = page.evaluate('''() => {
+                        const buttons = document.querySelectorAll('button, input[type="button"]');
+                        for (let btn of buttons) {
+                            const text = (btn.textContent || btn.value || '').trim();
+                            if (text.includes('查询')) {
+                                btn.click();
+                                return text;
+                            }
+                        }
+                        return false;
+                    }''')
+                    
+                    if search_clicked:
+                        print(f"  ✅ 已点击查询按钮: {search_clicked}")
+                    else:
+                        search_btn = page.locator('button:has-text("查询")').first
+                        if search_btn.count() > 0:
+                            search_btn.click()
+                            print("  ✅ 通过Playwright点击查询按钮")
+                    
                     page.wait_for_load_state('networkidle', timeout=15000)
                     page.wait_for_timeout(WAIT_TIME_NORMAL)
+                    
+                    # 截图确认搜索结果
+                    page.screenshot(path=get_screenshot_path("step9_search_result"), full_page=True)
+                    print("  📸 已截图搜索结果")
+                    
                 except Exception as e:
                     print(f"  ⚠️ 查询失败: {e}")
+                    page.screenshot(path=get_screenshot_path("step9_error"), full_page=True)
+                    print("  继续尝试直接查找申请记录...")
+                    page.wait_for_timeout(WAIT_TIME_NORMAL)
                 
                 # 步骤10: 找到对应申请并点击查看按钮
                 print(f"\n步骤10: 找到申请ID {target_id} 并点击查看")
@@ -294,10 +405,12 @@ def login_guardian():
                                 for (let cell of cells) {
                                     if (cell.textContent && cell.textContent.trim() === targetId) {
                                         // 找到该行，然后查找查看按钮
-                                        const viewBtn = row.querySelector('a:contains("查看"), button:contains("查看"), [title*="查看"], [onclick*="查看"]');
-                                        if (viewBtn) {
-                                            viewBtn.click();
-                                            return true;
+                                        const allLinks = row.querySelectorAll('a, button');
+                                        for (let btn of allLinks) {
+                                            if (btn.textContent && btn.textContent.includes('查看')) {
+                                                btn.click();
+                                                return true;
+                                            }
                                         }
                                         // 如果没找到，尝试找操作列
                                         const actionCells = row.querySelectorAll('td:last-child, td:last-of-type');
@@ -339,76 +452,89 @@ def login_guardian():
                     # 步骤11: 填写审批意见 - 选择"建议通过"
                     print("\n步骤11: 填写审批意见 - 选择建议通过")
                     try:
-                        # 方法1: 尝试通过label文本查找
+                        # 先截图查看审批意见区域
+                        page.screenshot(path=get_screenshot_path("step11_before_approval"), full_page=True)
+                        
+                        selected = False
+                        
+                        # 方法1: 通过label查找并点击（支持自定义radio组件）
                         result = page.evaluate('''() => {
                             const labels = document.querySelectorAll('label');
                             for (let label of labels) {
                                 if (label.textContent && label.textContent.includes('建议通过')) {
+                                    // 先尝试点击label本身（对于自定义radio组件，label可触发radio）
+                                    label.click();
+                                    
+                                    // 再尝试找到对应的radio并设置checked
                                     const radioId = label.getAttribute('for');
                                     if (radioId) {
                                         const radio = document.getElementById(radioId);
-                                        if (radio && radio.type === 'radio') {
-                                            radio.click();
-                                            return true;
+                                        if (radio) {
+                                            radio.checked = true;
+                                            radio.dispatchEvent(new Event('change', { bubbles: true }));
                                         }
                                     }
-                                    // 尝试查找label旁边的radio
-                                    const prevSibling = label.previousElementSibling;
-                                    if (prevSibling && prevSibling.type === 'radio') {
-                                        prevSibling.click();
-                                        return true;
+                                    
+                                    // 检查父元素中的radio
+                                    const parent = label.closest('.ant-radio-wrapper, .radio-wrapper, [class*="radio"]');
+                                    if (parent) {
+                                        const radio = parent.querySelector('input[type="radio"]');
+                                        if (radio) {
+                                            radio.checked = true;
+                                            radio.dispatchEvent(new Event('change', { bubbles: true }));
+                                        }
                                     }
+                                    
+                                    return true;
                                 }
                             }
                             return false;
                         }''')
+                        
                         if result:
                             print("  ✅ 已选择审批意见：建议通过")
+                            selected = True
                         else:
-                            # 方法2: 尝试通过span或其他元素查找
+                            # 方法2: 查找所有radio，检查value或相邻文本
                             result = page.evaluate('''() => {
-                                const spans = document.querySelectorAll('span');
-                                for (let span of spans) {
-                                    if (span.textContent && span.textContent.includes('建议通过')) {
-                                        // 查找父元素中的radio
-                                        let parent = span.parentElement;
-                                        while (parent) {
-                                            const radio = parent.querySelector('input[type="radio"]');
-                                            if (radio) {
-                                                radio.click();
-                                                return true;
-                                            }
-                                            parent = parent.parentElement;
+                                const radios = document.querySelectorAll('input[type="radio"]');
+                                for (let radio of radios) {
+                                    if (radio.value && radio.value.includes('通过')) {
+                                        radio.checked = true;
+                                        radio.dispatchEvent(new Event('change', { bubbles: true }));
+                                        radio.click();
+                                        return true;
+                                    }
+                                    // 检查相邻兄弟元素
+                                    let sibling = radio.nextElementSibling;
+                                    while (sibling) {
+                                        if (sibling.textContent && sibling.textContent.includes('建议通过')) {
+                                            radio.checked = true;
+                                            radio.dispatchEvent(new Event('change', { bubbles: true }));
+                                            radio.click();
+                                            return true;
                                         }
+                                        sibling = sibling.nextElementSibling;
                                     }
                                 }
                                 return false;
                             }''')
                             if result:
-                                print("  ✅ 已选择审批意见：建议通过")
-                            else:
-                                # 方法3: 查找所有radio并检查value或nextSibling
-                                result = page.evaluate('''() => {
-                                    const radios = document.querySelectorAll('input[type="radio"]');
-                                    for (let radio of radios) {
-                                        if (radio.value && (radio.value.includes('通过') || radio.value.includes('approve'))) {
-                                            radio.click();
-                                            return true;
-                                        }
-                                        const nextSibling = radio.nextSibling;
-                                        if (nextSibling && nextSibling.textContent && nextSibling.textContent.includes('建议通过')) {
-                                            radio.click();
-                                            return true;
-                                        }
-                                    }
-                                    return false;
-                                }''')
-                                if result:
-                                    print("  ✅ 已选择审批意见：建议通过")
-                                else:
-                                    print("  ⚠️ 未找到建议通过单选按钮")
+                                print("  ✅ 通过value找到并选择审批意见：建议通过")
+                                selected = True
+                        
+                        if not selected:
+                            print("  ⚠️ 未找到建议通过单选按钮")
+                            
+                        page.wait_for_timeout(WAIT_TIME_SHORT)
+                        
+                        # 截图确认审批意见状态
+                        page.screenshot(path=get_screenshot_path("step11_after_approval"), full_page=True)
+                        print("  📸 已截图审批意见状态")
+                        
                     except Exception as e:
                         print(f"  ⚠️ 选择审批意见失败: {e}")
+                        page.screenshot(path=get_screenshot_path("step11_error"), full_page=True)
                     
                     # 步骤11.5: 勾选初审环节需要补充的材料复选框（启用输入框）
                     print("\n步骤11.5: 勾选初审环节需要补充的材料复选框")
@@ -549,317 +675,216 @@ def login_guardian():
                     try:
                         clicked = False
                         
-                        # 先滚动到页面底部
-                        page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+                        # 先截图记录当前状态
+                        page.screenshot(path=get_screenshot_path("step14_before_submit"), full_page=True)
+                        print("  📸 已截图：提交前页面状态")
+                        
+                        # 先滚动到页面顶部（按钮可能在顶部）
+                        page.evaluate('window.scrollTo(0, 0)')
                         page.wait_for_timeout(WAIT_TIME_SHORT)
                         
-                        # 方法1: 尝试通过JavaScript查找并点击"提交复核"按钮
+                        # 方法1: 查找包含"提交复核"文字的按钮（使用 includes，更灵活）
                         result = page.evaluate('''() => {
-                            // 查找所有按钮和可点击元素
-                            const clickableElements = document.querySelectorAll('button, input[type="button"], input[type="submit"], a, span[onclick], div[onclick], [role="button"]');
-                            for (let el of clickableElements) {
-                                const text = el.textContent || el.value || el.innerText || el.title || '';
+                            const allButtons = document.querySelectorAll('button, input[type="button"], input[type="submit"]');
+                            for (let btn of allButtons) {
+                                const text = (btn.textContent || btn.innerText || btn.value || '').trim();
                                 if (text.includes('提交复核')) {
-                                    el.click();
-                                    return text;
+                                    btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+                                    btn.click();
+                                    return { success: true, text: text, tag: btn.tagName };
                                 }
                             }
-                            return false;
+                            return { success: false };
                         }''')
-                        if result:
-                            print(f"  ✅ 已点击按钮: {result}")
+                        
+                        if result and result.get('success'):
+                            print(f"  ✅ 已点击按钮: [{result['tag']}] {result['text']}")
                             clicked = True
+                        else:
+                            print("  ⚠️ 方法1未找到提交复核按钮，尝试备用方案...")
                         
-                        # 方法2: 尝试通过Playwright locator查找
+                        # 方法2: 通过Playwright原生 locator 查找
                         if not clicked:
-                            try:
-                                submit_btn = page.locator('text=提交复核')
-                                if submit_btn.count() > 0:
-                                    submit_btn.first.click(timeout=3000)
-                                    print("  ✅ 已点击提交复核按钮")
-                                    clicked = True
-                            except:
-                                pass
+                            submit_btn = page.locator('button:has-text("提交复核")').first
+                            if submit_btn.count() > 0:
+                                submit_btn.scroll_into_view_if_needed()
+                                submit_btn.click()
+                                print("  ✅ 通过Playwright locator点击提交复核")
+                                clicked = True
                         
-                        # 方法3: 尝试查找包含"提交"的按钮（排除其他按钮）
+                        # 方法3: 滚动到底部再查找
                         if not clicked:
+                            page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+                            page.wait_for_timeout(WAIT_TIME_SHORT)
+                            
                             result = page.evaluate('''() => {
-                                const buttons = document.querySelectorAll('button, input[type="button"], input[type="submit"], a');
+                                const buttons = document.querySelectorAll('button, input[type="button"], input[type="submit"]');
                                 for (let btn of buttons) {
-                                    const text = btn.textContent || btn.value || '';
-                                    // 只查找包含"提交"但不包含"更新"的按钮
-                                    if (text.includes('提交') && !text.includes('更新') && !text.includes('备注')) {
+                                    const text = (btn.textContent || btn.innerText || btn.value || '').trim();
+                                    if (text.includes('提交复核')) {
+                                        btn.scrollIntoView({ behavior: 'instant', block: 'center' });
                                         btn.click();
-                                        return text;
+                                        return { success: true, text: text };
                                     }
                                 }
-                                return false;
+                                return { success: false };
                             }''')
-                            if result:
-                                print(f"  ✅ 已点击按钮: {result}")
-                                clicked = True
-                        
-                        # 方法4: 尝试查找页面底部的按钮
-                        if not clicked:
-                            result = page.evaluate('''() => {
-                                // 查找页面底部区域的按钮
-                                const bottomButtons = document.querySelectorAll('.footer button, .bottom button, .action-bar button, [class*="footer"] button, [class*="bottom"] button');
-                                for (let btn of bottomButtons) {
-                                    btn.click();
-                                    return btn.textContent || btn.value || '底部按钮';
-                                }
-                                return false;
-                            }''')
-                            if result:
-                                print(f"  ✅ 已点击底部按钮: {result}")
+                            if result and result.get('success'):
+                                print(f"  ✅ 滚动到底部找到并点击: {result['text']}")
                                 clicked = True
                         
                         if not clicked:
-                            print("  ⚠️ 未找到提交复核按钮")
+                            print("  ❌ 所有方法均未找到提交复核按钮，截图保存...")
+                            page.screenshot(path=get_screenshot_path("step14_submit_not_found"), full_page=True)
                         else:
-                            page.wait_for_load_state('networkidle', timeout=15000)
-                            page.wait_for_timeout(WAIT_TIME_NORMAL)
-                            print(f"  提交复核后页面标题: {page.title()}")
+                            # 点击后等待弹窗出现（关键修复！）
+                            print("  ⏳ 等待弹窗出现...")
+                            page.wait_for_timeout(2000)
+                            
+                            # 截图确认点击后状态
+                            page.screenshot(path=get_screenshot_path("step14_after_submit"), full_page=True)
+                            print("  📸 已截图：点击提交后页面状态")
+                            
+                            # 等待弹窗渲染（尝试多种弹窗class）
+                            try:
+                                page.wait_for_selector('.ant-modal-wrap, .ant-modal-root, .modal, [role="dialog"]', 
+                                                      timeout=5000, state='visible')
+                                print("  ✅ 弹窗已出现")
+                            except:
+                                print("  ⚠️ 未检测到标准弹窗，继续执行...")
                     
                     except Exception as e:
-                        print(f"  ⚠️ 点击提交复核按钮失败: {e}")
+                        print(f"  ❌ 点击提交复核按钮失败: {e}")
+                        page.screenshot(path=get_screenshot_path("step14_error"), full_page=True)
                     
-                    # 步骤14.5: 勾选弹窗中的复选框（提交复核后出现的弹窗）
-                    print("\n步骤14.5: 勾选弹窗中的复选框")
+                    # 步骤14.5: 处理弹窗中的复选框和提交
+                    print("\n步骤14.5: 处理审批弹窗")
                     try:
-                        # 等待弹窗出现
                         page.wait_for_timeout(2000)
                         
-                        result = page.evaluate('''() => {
-                            const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-                            let count = 0;
-                            for (let cb of checkboxes) {
-                                cb.checked = true;
-                                cb.dispatchEvent(new Event('change'));
-                                count++;
-                            }
-                            return count;
-                        }''')
-                        print(f"  ✅ 已勾选 {result} 个复选框")
-                    except Exception as e:
-                        print(f"  ⚠️ 勾选复选框失败: {e}")
-                    
-                    # 步骤15: 检测弹窗并点击提交按钮
-                    print("\n步骤15: 检测弹窗并点击提交按钮")
-                    try:
+                        # 尝试多种弹窗选择器
+                        popup_selectors = [
+                            '.ant-modal-wrap',
+                            '.ant-modal-root',
+                            '.modal',
+                            '[role="dialog"]',
+                            '.dialog'
+                        ]
+                        
                         popup_found = False
-                        submit_success = False
-                        
-                        # 等待弹窗出现（最多等待5秒）
-                        page.wait_for_timeout(3000)
-                        
-                        # 方法1: 检测是否存在弹窗（增强版）
-                        popup_exists = page.evaluate('''() => {
-                            // 检测常见弹窗特征
-                            const selectors = [
-                                '.modal', '.popup', '.dialog', '[role="dialog"]',
-                                '.modal-dialog', '.ant-modal', '.el-dialog',
-                                '.ui-dialog', '.modal-content', '.popup-content'
-                            ];
-                            
-                            for (let selector of selectors) {
-                                const elements = document.querySelectorAll(selector);
-                                for (let el of elements) {
-                                    if (el.style.display !== 'none' && el.offsetParent !== null) {
-                                        return true;
-                                    }
-                                }
-                            }
-                            
-                            // 检测有确认标题的弹窗
-                            const titles = document.querySelectorAll('h1, h2, h3, .modal-title, .popup-title');
-                            for (let title of titles) {
-                                if (title.textContent && title.textContent.includes('确认')) {
-                                    const parent = title.parentElement;
-                                    if (parent && parent.classList) {
-                                        return true;
-                                    }
-                                }
-                            }
-                            
-                            // 检测遮罩层
-                            const overlays = document.querySelectorAll('.modal-backdrop, .modal-mask, .mask, .overlay');
-                            for (let overlay of overlays) {
-                                if (overlay.style.display !== 'none' && overlay.offsetParent !== null) {
-                                    return true;
-                                }
-                            }
-                            
-                            return false;
-                        }''')
-                        
-                        if popup_exists:
-                            popup_found = True
-                            print("  ✅ 检测到弹窗存在")
-                            
-                            # 尝试点击弹窗中的提交按钮
-                            result = page.evaluate('''() => {
-                                const selectors = [
-                                    '.modal', '.popup', '.dialog', '[role="dialog"]',
-                                    '.modal-dialog', '.ant-modal', '.el-dialog',
-                                    '.ui-dialog', '.modal-content', '.popup-content'
-                                ];
+                        for selector in popup_selectors:
+                            popup = page.locator(selector).first
+                            if popup.count() > 0 and popup.is_visible():
+                                popup_found = True
+                                print(f"  ✅ 找到弹窗: {selector}")
                                 
-                                for (let selector of selectors) {
-                                    const popups = document.querySelectorAll(selector);
-                                    for (let popup of popups) {
-                                        if (popup.style.display !== 'none' && popup.offsetParent !== null) {
-                                            // 在弹窗内查找提交按钮
-                                            const buttons = popup.querySelectorAll('button, input[type="button"], input[type="submit"]');
-                                            for (let btn of buttons) {
-                                                const text = btn.textContent || btn.value || '';
-                                                if (text.includes('提交')) {
-                                                    btn.click();
-                                                    return true;
-                                                }
-                                            }
-                                            // 尝试查找链接形式的提交
-                                            const links = popup.querySelectorAll('a');
-                                            for (let link of links) {
-                                                const text = link.textContent || '';
-                                                if (text.includes('提交')) {
-                                                    link.click();
-                                                    return true;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                # 勾选所有复选框
+                                checkboxes = popup.locator('input[type="checkbox"]').all()
+                                checked_count = 0
+                                for cb in checkboxes:
+                                    if not cb.is_checked():
+                                        cb.check()
+                                        checked_count += 1
+                                print(f"  ✅ 已勾选 {checked_count} 个复选框")
                                 
-                                // 如果以上都没找到，直接查找页面上的提交按钮（可能弹窗没有特殊class）
-                                const allButtons = document.querySelectorAll('button, input[type="button"], input[type="submit"]');
-                                for (let btn of allButtons) {
-                                    const text = btn.textContent || btn.value || '';
-                                    if (text.includes('提交')) {
-                                        btn.click();
-                                        return true;
-                                    }
-                                }
+                                # 填写附加信息（如果有textarea）
+                                textarea = popup.locator('textarea').first
+                                if textarea.count() > 0:
+                                    textarea.fill('无')
+                                    print("  ✅ 已填写附加信息")
                                 
-                                return false;
-                            }''')
-                            
-                            if result:
-                                submit_success = True
-                                print("  ✅ 已点击弹窗中的提交按钮")
-                                page.wait_for_load_state('networkidle', timeout=15000)
-                                page.wait_for_timeout(WAIT_TIME_NORMAL)
-                            else:
-                                print("  ⚠️ 弹窗存在，但未找到提交按钮")
-                        else:
-                            print("  ❌ 未检测到弹窗，报错")
+                                # 截图弹窗状态
+                                popup.screenshot(path=get_screenshot_path("step14_5_popup"))
+                                print("  📸 已截图弹窗状态")
+                                
+                                # 点击弹窗中的提交按钮
+                                submit_btn = popup.locator('button:has-text("提交")').first
+                                if submit_btn.count() > 0:
+                                    submit_btn.click()
+                                    print("  ✅ 已点击弹窗提交按钮")
+                                    page.wait_for_timeout(2000)
+                                else:
+                                    # 备用：查找所有包含"确定"或"提交"的按钮
+                                    buttons = popup.locator('button').all()
+                                    for btn in buttons:
+                                        btn_text = btn.inner_text().strip()
+                                        if '提交' in btn_text or '确定' in btn_text or '确认' in btn_text:
+                                            btn.click()
+                                            print(f"  ✅ 已点击弹窗按钮: {btn_text}")
+                                            page.wait_for_timeout(2000)
+                                            break
+                                
+                                break
+                        
+                        if not popup_found:
+                            print("  ⚠️ 未找到弹窗，检查是否已直接提交...")
+                            page.screenshot(path=get_screenshot_path("step14_5_no_popup"), full_page=True)
                     
                     except Exception as e:
-                        print(f"  ❌ 步骤15执行异常: {e}")
+                        print(f"  ❌ 弹窗处理异常: {e}")
+                        page.screenshot(path=get_screenshot_path("step14_5_error"), full_page=True)
                     
-                    # 步骤16: 检测确认弹窗并点击确定按钮
-                    print("\n步骤16: 检测确认弹窗并点击确定按钮")
+                    # 步骤15: 检测确认弹窗
+                    print("\n步骤15: 检测确认弹窗")
                     try:
-                        confirm_popup_found = False
-                        confirm_success = False
+                        page.wait_for_timeout(2000)
                         
-                        # 等待确认弹窗出现（最多等待5秒）
-                        page.wait_for_timeout(3000)
+                        # 截图确认当前状态
+                        page.screenshot(path=get_screenshot_path("step15_confirm_check"), full_page=True)
                         
-                        # 检测是否存在确认弹窗（增强版）
-                        confirm_exists = page.evaluate('''() => {
-                            // 方法1: 检测包含确认标题的弹窗
-                            const titles = document.querySelectorAll('h1, h2, h3, .modal-title, .title, [class*="title"]');
-                            for (let title of titles) {
-                                if (title.textContent && title.textContent.includes('确认')) {
-                                    return true;
-                                }
-                            }
+                        # 查找确认弹窗
+                        confirm_popup = page.locator('.ant-modal-wrap:has-text("确认"), .ant-modal-wrap:has-text("提示"), .ant-modal-wrap:has-text("提交复核")').first
+                        if confirm_popup.count() > 0 and confirm_popup.is_visible():
+                            print("  ✅ 检测到确认弹窗")
                             
-                            // 方法2: 检测红色按钮（通常是提交/确定按钮）
-                            const buttons = document.querySelectorAll('button');
-                            for (let btn of buttons) {
-                                const text = btn.textContent || '';
-                                if (text.includes('确定')) {
-                                    // 检查按钮样式是否为红色
-                                    const style = window.getComputedStyle(btn);
-                                    const bgColor = style.backgroundColor || style.background;
-                                    if (bgColor && bgColor.includes('red')) {
-                                        return true;
-                                    }
-                                    // 检查class是否包含红色相关
-                                    if (btn.className && (btn.className.includes('red') || btn.className.includes('primary'))) {
-                                        return true;
-                                    }
-                                }
-                            }
-                            
-                            // 方法3: 检测包含"确认提交复核"文本的元素
-                            const allElements = document.querySelectorAll('*');
-                            for (let el of allElements) {
-                                const text = el.textContent || '';
-                                if (text.includes('确认提交复核')) {
-                                    return true;
-                                }
-                            }
-                            
-                            return false;
-                        }''')
-                        
-                        if confirm_exists:
-                            confirm_popup_found = True
-                            print("  ✅ 检测到确认弹窗存在")
-                            
-                            # 尝试点击确定按钮（优先找红色按钮）
-                            result = page.evaluate('''() => {
-                                // 方法1: 直接查找所有按钮并点击包含"确定"的
-                                const allButtons = document.querySelectorAll('button, input[type="button"], input[type="submit"]');
-                                for (let btn of allButtons) {
-                                    const text = btn.textContent || btn.value || '';
-                                    if (text.includes('确定')) {
-                                        btn.click();
-                                        return true;
-                                    }
-                                }
-                                
-                                // 方法2: 查找所有元素中包含"确定"的按钮
-                                const allElements = document.querySelectorAll('*');
-                                for (let el of allElements) {
-                                    if (el.tagName === 'BUTTON' || el.tagName === 'INPUT') {
-                                        const text = el.textContent || el.value || '';
-                                        if (text.includes('确定')) {
-                                            el.click();
+                            # 查找确定按钮（优先红色/primary）
+                            ok_btn = confirm_popup.locator('button:has-text("确定"), button:has-text("确认"), button.ant-btn-primary').first
+                            if ok_btn.count() > 0:
+                                ok_btn.click()
+                                print("  ✅ 已点击确定按钮")
+                                page.wait_for_timeout(2000)
+                            else:
+                                # JavaScript 备用
+                                page.evaluate('''() => {
+                                    const btns = document.querySelectorAll('button');
+                                    for (let b of btns) {
+                                        if (b.textContent.includes('确定') || b.textContent.includes('确认')) {
+                                            b.click();
                                             return true;
                                         }
                                     }
-                                }
-                                
-                                // 方法3: 查找红色按钮
-                                const buttons = document.querySelectorAll('button');
-                                for (let btn of buttons) {
-                                    const style = window.getComputedStyle(btn);
-                                    const bgColor = style.backgroundColor || style.background;
-                                    if (bgColor && (bgColor.includes('255,') || bgColor.includes('red'))) {
-                                        btn.click();
-                                        return true;
-                                    }
-                                }
-                                
-                                return false;
-                            }''')
-                            
-                            if result:
-                                confirm_success = True
-                                print("  ✅ 已点击确定按钮")
-                                page.wait_for_load_state('networkidle', timeout=15000)
-                                page.wait_for_timeout(WAIT_TIME_NORMAL)
-                            else:
-                                print("  ⚠️ 确认弹窗存在，但未找到确定按钮")
+                                    return false;
+                                }''')
+                                print("  ✅ 通过JS点击确定按钮")
                         else:
-                            print("  ❌ 未检测到确认弹窗，报错")
+                            # 也尝试通过JS检测
+                            confirm_exists = page.evaluate('''() => {
+                                const allText = document.body.innerText || '';
+                                return allText.includes('确认提交复核') || allText.includes('确认提交');
+                            }''')
+                            if confirm_exists:
+                                print("  ✅ 页面包含确认文本，通过JS点击确定...")
+                                page.evaluate('''() => {
+                                    const btns = document.querySelectorAll('button');
+                                    for (let b of btns) {
+                                        if (b.textContent.includes('确定') || b.textContent.includes('确认')) {
+                                            b.click();
+                                            return true;
+                                        }
+                                    }
+                                    return false;
+                                }''')
+                            else:
+                                print("  未检测到确认弹窗，流程可能已完成")
                     
                     except Exception as e:
-                        print(f"  ❌ 步骤16执行异常: {e}")
+                        print(f"  ❌ 确认弹窗处理异常: {e}")
+                    
+                    # 最终状态截图
+                    print("\n📸 最终页面状态截图")
+                    page.screenshot(path=get_screenshot_path("final_state"), full_page=True)
+                    print(f"  当前页面标题: {page.title()}")
+                    print(f"  当前页面URL: {page.url}")
                 
                 else:
                     print(f"  ⚠️ 未找到申请ID {target_id} 的查看按钮")
@@ -883,8 +908,10 @@ def login_guardian():
                     break
 
 def main():
+    args = parse_args()
+    
     try:
-        result = login_guardian()
+        result = login_guardian(args.username, args.password, args.id)
         sys.exit(0 if result else 1)
     except Exception as e:
         print(f"\n❌ 执行异常: {str(e)}")

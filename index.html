@@ -843,6 +843,21 @@
                         document.getElementById('auditTaskId').textContent = data.audit_task_id;
                     }
                     
+                    // 如果返回了注册账号，自动显示
+                    if (data.account) {
+                        document.getElementById('account').textContent = data.account;
+                    }
+                    
+                    // 如果返回了注册邮箱，自动显示
+                    if (data.email) {
+                        document.getElementById('email').textContent = data.email;
+                    }
+                    
+                    // 如果返回了密码，自动显示
+                    if (data.password) {
+                        document.querySelector('.info-value').textContent = data.password;
+                    }
+                    
                     if (!data.running) {
                         clearInterval(interval);
                         const btn = document.querySelector('.btn-success');
@@ -851,6 +866,8 @@
                         
                         if (data.progress === 100) {
                             clearError();
+                            // 显示注册成功提示
+                            alert(`注册成功！\n\n登录账号: ${data.account || '未获取'}\n登录密码: ${data.password || '未获取'}\n注册邮箱: ${data.email || '未获取'}\n审批任务ID: ${data.audit_task_id || '未获取'}`);
                         } else {
                             showError('注册失败: ' + data.message, data.progress);
                             markStepError(steps, data.progress);

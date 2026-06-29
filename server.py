@@ -32,6 +32,9 @@ running = False
 current_progress = 0
 progress_message = "等待启动"
 current_audit_task_id = None
+current_account = None
+current_email = None
+current_password = None
 
 @app.route('/api/register', methods=['POST'])
 def start_register():
@@ -71,7 +74,7 @@ def start_register():
     progress_message = "正在启动..."
     
     def run_script():
-        global running, current_progress, progress_message, current_audit_task_id
+        global running, current_progress, progress_message, current_audit_task_id, current_account, current_email, current_password
         try:
             current_progress = 10
             progress_message = "正在启动浏览器..."
@@ -121,6 +124,26 @@ def start_register():
                 progress_message = "脚本执行完成..."
                 print("步骤3: 脚本执行完成")
                 
+                # 解析注册脚本输出，提取账号和邮箱
+                parsed_account = None
+                parsed_email = None
+                parsed_password = "sina@1234"
+                
+                for line in result.stdout.split('\n'):
+                    if '登录账号:' in line and '****' not in line:
+                        parsed_account = line.split(':')[1].strip()
+                    elif '注册邮箱:' in line and '@' in line:
+                        parsed_email = line.split(':')[1].strip()
+                
+                # 保存解析结果
+                if parsed_account:
+                    current_account = parsed_account
+                    print(f"✅ 解析到注册账号: {current_account}")
+                if parsed_email:
+                    current_email = parsed_email
+                    print(f"✅ 解析到注册邮箱: {current_email}")
+                current_password = parsed_password
+                
                 current_progress = 90
                 progress_message = "正在查询审批任务ID..."
                 print("步骤4: 查询审批任务ID")
@@ -128,18 +151,34 @@ def start_register():
                 current_audit_task_id = None
                 try:
                     from src.services.database_service import get_audit_task_id_by_email
-                    audit_task_id = get_audit_task_id_by_email(email)
-                    if audit_task_id:
-                        current_audit_task_id = audit_task_id
-                        print(f"✅ 查询到审批任务ID: {audit_task_id}")
+                    # 使用解析到的邮箱查询，如果没有则使用前端传入的邮箱
+                    query_email = parsed_email if parsed_email else email
+                    if query_email:
+                        audit_task_id = get_audit_task_id_by_email(query_email)
+                        if audit_task_id:
+                            current_audit_task_id = audit_task_id
+                            print(f"✅ 查询到审批任务ID: {audit_task_id}")
                 except Exception as e:
                     print(f"⚠️ 查询审批任务ID失败: {str(e)}")
                 
-                current_progress = 100
-                progress_message = "注册完成！"
-                print("✓ 注册成功")
+                # 判断注册成功的条件：必须查询到审批任务ID
+                if current_audit_task_id:
+                    current_progress = 100
+                    progress_message = "注册完成！"
+                    print("✓ 注册成功（已查询到审批任务ID）")
+                else:
+                    current_progress = 0
+                    current_account = None
+                    current_email = None
+                    current_password = None
+                    error_msg = f"注册失败: 未能查询到审批任务ID，请检查注册是否成功"
+                    progress_message = error_msg
+                    print(f"✗ 注册失败: {error_msg}")
             else:
                 current_progress = 0
+                current_account = None
+                current_email = None
+                current_password = None
                 if not error_msg:
                     error_msg = f"注册失败: {result.stderr[:100] if result.stderr else '未知错误'}"
                 progress_message = error_msg
@@ -148,10 +187,16 @@ def start_register():
         except subprocess.TimeoutExpired:
             current_progress = 0
             progress_message = "注册超时！"
+            current_account = None
+            current_email = None
+            current_password = None
             print("✗ 注册超时")
         except Exception as e:
             current_progress = 0
             progress_message = f"执行失败: {str(e)}"
+            current_account = None
+            current_email = None
+            current_password = None
             print(f"✗ 执行异常: {str(e)}")
         finally:
             running = False
@@ -164,13 +209,16 @@ def start_register():
 
 @app.route('/api/progress', methods=['GET'])
 def get_progress():
-    """获取注册进度"""
+    """获取注册进度和注册结果"""
     print(f"获取进度: {current_progress}% - {progress_message}")
     return jsonify({
         'running': running,
         'progress': current_progress,
         'message': progress_message,
-        'audit_task_id': current_audit_task_id
+        'audit_task_id': current_audit_task_id,
+        'account': current_account,
+        'email': current_email,
+        'password': current_password
     })
 
 @app.route('/api/config', methods=['GET'])

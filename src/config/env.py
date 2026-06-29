@@ -46,7 +46,7 @@ ORACLE_CONFIG = {
     'password': 'yxPFDImVfNn2hO',
     'host': '10.65.193.34',
     'port': 1521,
-    'service_name': 'erm',
+    'service_name': 'func3',
     'driver': 'oracledb'
 }
 
