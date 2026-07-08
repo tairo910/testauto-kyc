@@ -616,10 +616,21 @@ def fill_page3(page, account, business_type=1):
             selects[2].click()
             page.wait_for_timeout(3000)
             
-            # 先检查是否已经选中了
+            # 先检查第三个下拉框是否已经选中了目标值（在所属行业表单项内查找）
             selected_text = page.evaluate('''() => {
-                const selected = document.querySelector('.ant-select-selection-selected-value');
-                return selected ? selected.textContent : '';
+                let industryItem = null;
+                const formItems = document.querySelectorAll('.ant-form-item');
+                for (let item of formItems) {
+                    if (item.textContent && item.textContent.includes('所属行业')) {
+                        industryItem = item;
+                        break;
+                    }
+                }
+                if (!industryItem) return '';
+                const selects = industryItem.querySelectorAll('.ant-select');
+                if (selects.length < 3) return '';
+                const selected = selects[2].querySelector('.ant-select-selection-selected-value, .ant-select-selection-item');
+                return selected ? selected.textContent.trim() : '';
             }''')
             
             if selected_text and config.INDUSTRY_LEVEL3 in selected_text:
@@ -630,7 +641,7 @@ def fill_page3(page, account, business_type=1):
                     // 找到所有下拉菜单项
                     const items = document.querySelectorAll('.ant-select-dropdown-menu-item, .ant-select-item');
                     for (let item of items) {{
-                        if (item.textContent.trim() === '{config.INDUSTRY_LEVEL3}' && !item.classList.contains('ant-select-dropdown-menu-item-selected')) {{
+                        if (item.textContent.trim() === '{config.INDUSTRY_LEVEL3}' && !item.classList.contains('ant-select-dropdown-menu-item-selected') && !item.classList.contains('ant-select-item-option-selected')) {{
                             item.click();
                             return '已点击{config.INDUSTRY_LEVEL3}（第三层）';
                         }}
@@ -791,32 +802,41 @@ def fill_page3(page, account, business_type=1):
 
     # 7. 先选择证件类型（这样页面会切换为对应的证件上传区域）
     print(f"选择证件类型: {config.LEGAL_ID_TYPE}...")
-    # 使用 JavaScript 选择证件类型
-    js_result = page.evaluate(f'''() => {{
-        // 先找到证件类型的下拉框
+    # 先点击下拉框，等待下拉菜单出现，再同步查找选项
+    js_click = page.evaluate(f'''() => {{
         const formItems = document.querySelectorAll('.ant-form-item');
         for (let item of formItems) {{
             if (item.textContent.includes('证件类型')) {{
                 const select = item.querySelector('.ant-select');
                 if (select) {{
                     select.click();
-                    // 等待下拉菜单出现
-                    setTimeout(() => {{
-                        const options = document.querySelectorAll('.ant-select-dropdown-menu-item, .ant-select-item');
-                        for (let opt of options) {{
-                            if (opt.textContent.includes('{config.LEGAL_ID_TYPE}')) {{
-                                opt.click();
-                                return true;
-                            }}
-                        }}
-                    }}, 500);
-                    return '已点击证件类型下拉框';
+                    return 'clicked';
                 }}
             }}
         }}
-        return '未找到证件类型下拉框';
+        return 'not_found';
     }}''')
-    print(f"  {js_result}")
+    print(f"  证件类型下拉框: {js_click}")
+    
+    if js_click == 'clicked':
+        # 等待下拉菜单渲染
+        page.wait_for_timeout(800)
+        # 同步查找并点击选项
+        js_result = page.evaluate(f'''() => {{
+            const dropdown = document.querySelector('.ant-select-dropdown');
+            if (!dropdown) return 'dropdown_not_found';
+            const options = dropdown.querySelectorAll('.ant-select-dropdown-menu-item, .ant-select-item');
+            for (let opt of options) {{
+                if (opt.textContent.includes('{config.LEGAL_ID_TYPE}')) {{
+                    opt.click();
+                    return '已选择证件类型: {config.LEGAL_ID_TYPE}';
+                }}
+            }}
+            return '选项未找到';
+        }}''')
+        print(f"  {js_result}")
+    else:
+        print(f"  未找到证件类型下拉框")
     page.wait_for_timeout(3000)  # 等待证件类型切换完成，页面重新渲染
 
     # 8-9. 根据证件类型上传对应的证件图片
@@ -1685,7 +1705,11 @@ def register_sina_member(input_param='babweb 业务1', id_type=None):
                 print("\n或者手动填写补充资料页面（URL: /web/reviewCheck）")
             
             # 等待用户查看
-            input("按回车键关闭浏览器...")
+            if os.environ.get('NO_WAIT') == '1':
+                print("非交互模式，跳过等待，5秒后关闭浏览器...")
+                page.wait_for_timeout(5000)
+            else:
+                input("按回车键关闭浏览器...")
             
         except Exception as e:
             print(f"执行出错: {e}")
@@ -1800,7 +1824,11 @@ def register_supplement(input_param='babweb 业务1', login_account=None):
                 print(f"密码: {config.LOGIN_PASSWORD}")
                 print("\n请在浏览器中完成登录，登录成功后按回车键继续...")
                 print("="*50)
-                input()  # 等待用户手动登录
+                if os.environ.get('NO_WAIT') == '1':
+                    print("非交互模式，等待30秒后自动继续...")
+                    page.wait_for_timeout(30000)
+                else:
+                    input()  # 等待用户手动登录
                 
                 # 用户登录后，再次检查当前URL
                 page.wait_for_timeout(3000)
@@ -1827,7 +1855,10 @@ def register_supplement(input_param='babweb 业务1', login_account=None):
                 page.screenshot(path=error_screenshot, full_page=True)
                 print(f"\n当前页面截图保存到: {error_screenshot}")
                 
-                input("\n按回车键关闭浏览器...")
+                if os.environ.get('NO_WAIT') == '1':
+                    print("非交互模式，跳过等待...")
+                else:
+                    input("\n按回车键关闭浏览器...")
                 return
             
             # 在控制台页面，查找并点击"提交资料"按钮
@@ -1867,8 +1898,10 @@ def register_supplement(input_param='babweb 业务1', login_account=None):
                 page.screenshot(path=error_screenshot, full_page=True)
                 print(f"\n当前页面截图保存到: {error_screenshot}")
                 
-                input("\n按回车键关闭浏览器...")
-                return
+                if os.environ.get('NO_WAIT') == '1':
+                    print("非交互模式，跳过等待...")
+                else:
+                    input("\n按回车键关闭浏览器...")
             
             # 执行补充资料页面填写
             if not fill_page4(page, account, business_type_num):
@@ -1880,7 +1913,11 @@ def register_supplement(input_param='babweb 业务1', login_account=None):
             print("=" * 50)
             
             # 等待用户查看
-            input("按回车键关闭浏览器...")
+            if os.environ.get('NO_WAIT') == '1':
+                print("非交互模式，跳过等待，5秒后关闭浏览器...")
+                page.wait_for_timeout(5000)
+            else:
+                input("按回车键关闭浏览器...")
             
         except Exception as e:
             print(f"执行出错: {e}")
@@ -1894,8 +1931,6 @@ def register_supplement(input_param='babweb 业务1', login_account=None):
 
 if __name__ == "__main__":
     import sys
-
-    # 从命令行参数获取输入
     # 支持格式:
     #   python sina_register.py babweb 业务1
     #   python sina_register.py babweb 业务1 法人身份证
@@ -1909,6 +1944,11 @@ if __name__ == "__main__":
     id_type = None  # 默认使用配置文件中的证件类型
     is_supplement = False  # 是否为补充资料页面模式
     login_account = None  # 登录账号（用于补充资料页面）
+    no_wait = '--no-wait' in sys.argv  # 非交互模式，跳过input等待
+    os.environ['NO_WAIT'] = '1' if no_wait else '0'
+    
+    # 从 sys.argv 中移除 --no-wait，避免被当作位置参数解析
+    filtered_argv = [a for a in sys.argv if a != '--no-wait']
 
     # 证件类型别名映射（支持简写）
     ID_TYPE_ALIASES = {
@@ -1920,11 +1960,11 @@ if __name__ == "__main__":
         "港澳居民居住证": "港澳居民居住证",
     }
 
-    if len(sys.argv) > 4:
+    if len(filtered_argv) > 4:
         # 格式: python sina_register.py babweb 业务1 补充资料 babwebyw11202606161348
-        input_param = f"{sys.argv[1]} {sys.argv[2]}"
-        third_arg = sys.argv[3]
-        fourth_arg = sys.argv[4]
+        input_param = f"{filtered_argv[1]} {filtered_argv[2]}"
+        third_arg = filtered_argv[3]
+        fourth_arg = filtered_argv[4]
         
         # 检查是否为补充资料模式
         if third_arg == "补充资料" or third_arg == "supplement":
@@ -1940,11 +1980,11 @@ if __name__ == "__main__":
             # 映射到完整的证件类型名称
             id_type = ID_TYPE_ALIASES.get(id_type_short, id_type_short)
             print(f"命令行参数解析: input_param={input_param}, id_type={id_type}")
-    elif len(sys.argv) > 3:
+    elif len(filtered_argv) > 3:
         # 格式: python sina_register.py babweb 业务2 法人身份证
         # 或: python sina_register.py babweb 业务1 补充资料
-        input_param = f"{sys.argv[1]} {sys.argv[2]}"
-        third_arg = sys.argv[3]
+        input_param = f"{filtered_argv[1]} {filtered_argv[2]}"
+        third_arg = filtered_argv[3]
         
         # 检查是否为补充资料模式
         if third_arg == "补充资料" or third_arg == "supplement":
@@ -1959,13 +1999,13 @@ if __name__ == "__main__":
             # 映射到完整的证件类型名称
             id_type = ID_TYPE_ALIASES.get(id_type_short, id_type_short)
             print(f"命令行参数解析: input_param={input_param}, id_type={id_type}")
-    elif len(sys.argv) > 2:
+    elif len(filtered_argv) > 2:
         # 格式: python sina_register.py babweb 业务2
-        input_param = f"{sys.argv[1]} {sys.argv[2]}"
+        input_param = f"{filtered_argv[1]} {filtered_argv[2]}"
         print(f"命令行参数解析: input_param={input_param}, id_type=None")
-    elif len(sys.argv) > 1:
+    elif len(filtered_argv) > 1:
         # 可能是完整字符串或只有业务类型
-        input_param = sys.argv[1]
+        input_param = filtered_argv[1]
         print(f"命令行参数解析: input_param={input_param}, id_type=None")
 
     # 根据模式执行不同的流程

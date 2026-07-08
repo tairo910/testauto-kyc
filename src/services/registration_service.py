@@ -693,25 +693,50 @@ def fill_page3(page, account, business_type=1):
     }}''')
     page.wait_for_timeout(1500)
     
-    page.evaluate(f'''() => {{
-        const inputs = document.querySelectorAll('input');
-        for (let input of inputs) {{
+    print(f"   配置的法人身份证号: {LEGAL_ID_NUMBER}")
+    
+    page.evaluate(f'''(targetId) => {{
+        document.querySelectorAll('input').forEach(input => {{
             const placeholder = input.getAttribute('placeholder') || '';
             const name = input.getAttribute('name') || '';
             const parent = input.closest('.ant-form-item');
-            const label = parent ? parent.textContent : '';
-            if (placeholder.includes('证件号码') || name.includes('idNumber') || label.includes('法人证件号码')) {{
-                input.disabled = false;
-                input.readOnly = false;
-                input.value = '';
-                input.value = '{LEGAL_ID_NUMBER}';
-                input.dispatchEvent(new Event('focus', {{ bubbles: true }}));
-                input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                input.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+            const parentText = parent ? parent.textContent : '';
+            
+            if (placeholder.includes('证件号码') && parentText.includes('法人')) {{
+                input.removeAttribute('readonly');
+                input.removeAttribute('disabled');
+                input.value = targetId;
+                input.dispatchEvent(new Event('change', {{bubbles:true}}));
+            }}
+        }});
+    }}''', LEGAL_ID_NUMBER)
+    page.wait_for_timeout(1000)
+    
+    page.evaluate(f'''(targetId) => {{
+        const inputs = document.querySelectorAll('input');
+        for (let i = 0; i < inputs.length; i++) {{
+            const input = inputs[i];
+            const placeholder = input.getAttribute('placeholder') || '';
+            if (placeholder.includes('证件号码')) {{
+                input.removeAttribute('readonly');
+                input.removeAttribute('disabled');
+                input.value = targetId;
+                input.dispatchEvent(new Event('change', {{bubbles:true}}));
+                return;
             }}
         }}
-    }}''')
+    }}''', LEGAL_ID_NUMBER)
+    page.wait_for_timeout(1000)
+    
+    legal_id_input = page.locator('input[placeholder*="证件号码"]').first
+    if legal_id_input.count() > 0:
+        legal_id_input.fill(LEGAL_ID_NUMBER)
+        page.wait_for_timeout(500)
+        actual_value = legal_id_input.input_value()
+        print(f"   ✅ Playwright填写成功: {actual_value}")
+    else:
+        print(f"   ❌ 未找到证件号码输入框")
+    
     page.wait_for_timeout(1500)
     
     print("\n📱 填写法人手机号...")
@@ -751,7 +776,11 @@ def fill_page3(page, account, business_type=1):
     if phone_found:
         print("✅ 成功填写法人手机号")
     else:
-        print("❌ 未找到法人手机号输入框")
+        print("❌ 未找到法人手机号输入框，尝试兜底方式...")
+        phone_input = page.locator('input[placeholder*="法人手机号"], input[placeholder*="请输入法人手机号"]').first
+        if phone_input.count() > 0:
+            phone_input.fill(LEGAL_PHONE)
+            print(f"✅ 使用兜底手机号 {LEGAL_PHONE}")
     page.wait_for_timeout(1000)
     
     print("\n� 填写真实姓名...")
@@ -991,6 +1020,114 @@ def fill_page3(page, account, business_type=1):
     
     return True
 
+def fill_page4(page, account, business_type=1):
+    """填写补充资料页面（页面4）- 仅业务1、业务2审核通过后进入
+    URL: https://e.pay.sina.com.cn/web/reviewCheck
+    
+    参数:
+        page: Playwright页面对象
+        account: 登录账号
+        business_type: 业务类型（1或2）
+    """
+    print("\n" + "="*50)
+    print("页面4：补充资料审核")
+    print("="*50)
+    
+    page.wait_for_timeout(3000)
+    
+    screenshot_path = get_screenshot_path(f"page4_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+    page.screenshot(path=screenshot_path, full_page=True)
+    print(f"页面4截图保存到: {screenshot_path}")
+    
+    print("\n填写结算账户...")
+    
+    bank_account_name_input = page.locator('input[placeholder*="银行账户名"], input[name*="bankAccountName"]').first
+    if bank_account_name_input.count() > 0:
+        bank_account_name_input.fill(BANK_ACCOUNT_NAME)
+        print(f"  已填写银行账户名: {BANK_ACCOUNT_NAME}")
+    
+    print("  选择开户银行...")
+    bank_select = page.locator('.ant-form-item:has-text("开户银行") .ant-select').first
+    if bank_select.count() > 0:
+        bank_select.click()
+        page.wait_for_timeout(2000)
+        bank_option = page.locator(f'.ant-select-dropdown-menu-item:has-text("{BANK_NAME}"), .ant-select-item:has-text("{BANK_NAME}")').first
+        if bank_option.count() > 0:
+            bank_option.click()
+            print(f"    已选择开户银行: {BANK_NAME}")
+        page.wait_for_timeout(2000)
+    
+    bank_account_input = page.locator('input[placeholder*="企业银行账号"], input[name*="bankAccount"]').first
+    if bank_account_input.count() > 0:
+        bank_account_input.fill(BANK_ACCOUNT_NUMBER)
+        print(f"  已填写企业银行账号: {BANK_ACCOUNT_NUMBER}")
+    
+    print("  上传开户证明材料...")
+    cert_path = f"{ATTACHMENT_DIR}/{FILE_BANK_CERTIFICATE}"
+    if os.path.exists(cert_path):
+        cert_upload = page.locator('.ant-form-item:has-text("开户证明材料") .ant-btn').first
+        if cert_upload.count() > 0:
+            cert_upload.click()
+            page.wait_for_timeout(2000)
+            file_input = page.locator('input[type="file"]').last
+            if file_input.count() > 0:
+                file_input.set_input_files(cert_path)
+                print(f"    已上传开户证明材料: {cert_path}")
+                page.wait_for_timeout(3000)
+    
+    print("\n填写开户意愿核实方式...")
+    
+    video_radio = page.locator('label:has-text("上传开户意愿视频"), .ant-radio-wrapper:has-text("上传开户意愿视频")').first
+    if video_radio.count() > 0:
+        video_radio.click()
+        print("  已选择: 上传开户意愿视频")
+        page.wait_for_timeout(2000)
+    
+    legal_person_radio = page.locator('label:has-text("由法人本人认证"), .ant-radio-wrapper:has-text("由法人本人认证")').first
+    if legal_person_radio.count() > 0:
+        legal_person_radio.click()
+        print("  已选择: 由法人本人认证")
+        page.wait_for_timeout(2000)
+    
+    print("  上传开户意愿视频...")
+    video_path = f"{ATTACHMENT_DIR}/{FILE_VIDEO}"
+    if os.path.exists(video_path):
+        video_upload = page.locator('.ant-form-item:has-text("开户意愿视频") .ant-btn, .ant-form-item:has-text("上传") .ant-btn').last
+        if video_upload.count() > 0:
+            video_upload.click()
+            page.wait_for_timeout(2000)
+            file_input = page.locator('input[type="file"]').last
+            if file_input.count() > 0:
+                file_input.set_input_files(video_path)
+                print(f"    已上传开户意愿视频: {video_path}")
+                page.wait_for_timeout(3000)
+    
+    screenshot_path = get_screenshot_path(f"page4_filled_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+    page.screenshot(path=screenshot_path, full_page=True)
+    print(f"\n页面4填写完成截图保存到: {screenshot_path}")
+    
+    print("\n点击【提交】按钮...")
+    
+    page.evaluate('''() => {
+        window.scrollTo(0, document.body.scrollHeight);
+    }''')
+    page.wait_for_timeout(2000)
+    
+    submit_btn = page.locator('button:has-text("提交"), .ant-btn-primary:has-text("提交")').first
+    if submit_btn.count() > 0:
+        submit_btn.click()
+        print("  已点击提交按钮")
+        page.wait_for_timeout(5000)
+        
+        final_screenshot = get_screenshot_path(f"page4_final_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+        page.screenshot(path=final_screenshot, full_page=True)
+        print(f"页面4最终截图保存到: {final_screenshot}")
+        print("\n页面4提交完成！")
+        return True
+    else:
+        print("  未找到提交按钮")
+        return False
+
 def run_registration(business_type="业务1", keep_browser_open=True):
     account = generate_account(business_type=business_type)
     email = generate_random_email(account)
@@ -1106,6 +1243,92 @@ def run_registration(business_type="业务1", keep_browser_open=True):
         traceback.print_exc()
         
         error_screenshot = get_screenshot_path(f"error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+        if page:
+            page.screenshot(path=error_screenshot, full_page=True)
+            print(f"错误截图已保存到: {error_screenshot}")
+        
+        if keep_browser_open and browser:
+            print("浏览器保持打开状态，可手动查看错误")
+            import time
+            while True:
+                time.sleep(5)
+        else:
+            if browser:
+                browser.close()
+            p.stop()
+        raise
+    
+    return {
+        'account': account,
+        'password': password,
+        'email': email,
+        'business_type': business_type,
+        'screenshot_dir': screenshot_dir
+    }
+
+def run_registration_supplement(business_type="业务1", keep_browser_open=True):
+    account = generate_account(business_type=business_type)
+    email = generate_random_email(account)
+    password = LOGIN_PASSWORD
+    
+    screenshot_dir = create_screenshot_dir(account)
+    
+    p = sync_playwright().start()
+    browser = None
+    
+    try:
+        browser = p.chromium.launch(
+            headless=HEADLESS_MODE,
+            executable_path=get_browser_path(),
+            args=['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
+        )
+        
+        context = browser.new_context(
+            viewport={'width': BROWSER_VIEWPORT_WIDTH, 'height': BROWSER_VIEWPORT_HEIGHT},
+            user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            ignore_https_errors=True
+        )
+        
+        page = context.new_page()
+        page.set_default_timeout(TIMEOUT * 1000)
+        
+        print("=" * 60)
+        print("开始补充资料流程")
+        print("=" * 60)
+        print(f"业务类型: {business_type}")
+        print(f"生成账号: {account}")
+        print(f"生成邮箱: {email}")
+        print("=" * 60)
+        
+        page.goto(f"{get_api_url()}/web/reviewCheck")
+        page.wait_for_load_state("networkidle")
+        print(f"✅ 成功打开补充资料页面: {page.url}")
+        
+        print("\n--- 页面4：补充资料审核 ---")
+        page4_success = fill_page4(page, account, int(business_type.replace("业务", "")))
+        print(f"页面4完成: {'成功' if page4_success else '失败'}")
+        
+        print("\n" + "=" * 60)
+        print("补充资料流程执行完成")
+        print("=" * 60)
+        
+        if keep_browser_open:
+            print("浏览器将保持打开状态，方便手动验证")
+            print("按 Ctrl+C 或关闭浏览器窗口结束")
+            import time
+            while True:
+                time.sleep(5)
+        else:
+            print("关闭浏览器...")
+            browser.close()
+            p.stop()
+            
+    except Exception as e:
+        print(f"\n❌ 补充资料过程中发生错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        error_screenshot = get_screenshot_path(f"supplement_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
         if page:
             page.screenshot(path=error_screenshot, full_page=True)
             print(f"错误截图已保存到: {error_screenshot}")

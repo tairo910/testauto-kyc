@@ -1,0 +1,56 @@
+{
+    "chains": {
+        "default": [
+            "register",
+            "approve",
+            "buchong"
+        ],
+        "register_only": [
+            "register"
+        ],
+        "approve_only": [
+            "approve"
+        ],
+        "approve_and_buchong": [
+            "approve",
+            "buchong"
+        ],
+        "buchong_only": [
+            "buchong"
+        ],
+        "full": [
+            "register",
+            "approve",
+            "buchong"
+        ]
+    },
+    "scripts": {
+        "register": {
+            "script": "sina_register.py",
+            "args_template": [
+                "babweb",
+                "{business_type}",
+                "--no-wait"
+            ],
+            "timeout": 300,
+            "description": "商户注册"
+        },
+        "approve": {
+            "script": "merchant_access_approval.py",
+            "args_template": [
+                "{id}",
+                "--no-wait"
+            ],
+            "timeout": 300,
+            "description": "商户准入审批"
+        },
+        "buchong": {
+            "script": "sina_register_buchong.py",
+            "args_template": [
+                "{account}"
+            ],
+            "timeout": 300,
+            "description": "补充资料"
+        }
+    }
+}
