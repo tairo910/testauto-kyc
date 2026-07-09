@@ -1,4 +1,4 @@
-# 新浪支付 KYC 开户自动化系统
+# KYC 开户自动化系统
 
 一站式企业开户自动化解决方案，覆盖**注册 → 审批 → 补充资料**全流程。
 
@@ -8,7 +8,7 @@
 
 | 模块 | 脚本 | 说明 |
 |------|------|------|
-| 新浪注册 | `sina_register.py` | 新浪支付企业会员注册，自动填写表单、上传材料 |
+| 会员注册 | `sina_register.py` | 企业会员注册，自动填写表单、上传材料 |
 | 补充资料 | `sina_register_buchong.py` | 审批通过后补充结算账户、受益人、视频认证等资料 |
 | 初审审批 | `merchant_access_approval.py` | Guardian 系统商户准入初审（经办 + 复核） |
 | 复审审批 | `merchant_review_approval.py` | Guardian 系统商户准入复审 |
@@ -45,7 +45,7 @@ pip install cx_Oracle    # 数据库查询需要
 ### 方式一：独立运行单个脚本
 
 ```bash
-# 新浪注册
+# 会员注册
 python3 sina_register.py babweb 业务1
 
 # 补充资料
@@ -123,7 +123,7 @@ python3 scheduler.py --list
 ## 目录结构
 
 ```
-├── sina_register.py           # 新浪注册脚本
+├── sina_register.py           # 会员注册脚本
 ├── sina_register_buchong.py   # 补充资料脚本
 ├── merchant_access_approval.py # 初审审批脚本
 ├── merchant_review_approval.py # 复审审批脚本
