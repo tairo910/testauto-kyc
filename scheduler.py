@@ -164,24 +164,29 @@ def run_script(script_config, variables, step_num, total_steps):
     # 解析参数
     args = resolve_args(args_template, variables)
     cmd = ['python3', script_path] + args
-    
+
+    # 调度器模式下设置非交互环境变量，避免脚本等待用户输入
+    env = os.environ.copy()
+    env['NO_WAIT'] = '1'
+
     print(f"\n{'='*60}")
     print(f"步骤 {step_num}/{total_steps}: {description}")
     print(f"脚本: {script_name}")
     print(f"命令: {' '.join(cmd)}")
     print(f"超时: {timeout}秒")
     print(f"{'='*60}")
-    
+
     start_time = time.time()
     stdout_lines = []
-    
+
     try:
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            cwd=SCRIPT_DIR
+            cwd=SCRIPT_DIR,
+            env=env
         )
         
         # 实时输出 stdout
@@ -325,12 +330,109 @@ def run_chain(chain_name, config, variables, stop_on_error=True):
     for r in results:
         status = "✅ 成功" if r['success'] else "❌ 失败"
         print(f"  {r['step']} ({r.get('script', 'N/A')}): {status}")
-    
+
     all_success = all(r['success'] for r in results)
     print(f"\n最终结果: {'✅ 全部成功' if all_success else '❌ 部分失败'}")
     print(f"结束时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
+
+    # 保存测试数据到文件
+    save_test_data(variables, results, chain_name, all_success)
+
     return all_success
+
+
+def save_test_data(variables, results, chain_name, all_success):
+    """将测试数据保存到文件"""
+    # 构建测试数据
+    test_data = {
+        "执行时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "链路名称": chain_name,
+        "执行结果": "全部成功" if all_success else "部分失败",
+        "步骤详情": [],
+        "测试账号信息": {
+            "登录账号": variables.get('account', ''),
+            "登录密码": _get_login_password(),
+            "邮箱": variables.get('email', ''),
+            "审批任务ID": variables.get('id', ''),
+            "业务类型": variables.get('business_type', ''),
+        }
+    }
+
+    for r in results:
+        test_data["步骤详情"].append({
+            "步骤": r['step'],
+            "脚本": r.get('script', ''),
+            "状态": "成功" if r['success'] else "失败"
+        })
+
+    # 生成文件名（使用账号或时间戳）
+    account = variables.get('account', '')
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{account}_{timestamp}" if account else f"scheduler_{timestamp}"
+
+    # 保存为 TXT
+    output_dir = os.path.join(SCRIPT_DIR, 'output')
+    os.makedirs(output_dir, exist_ok=True)
+
+    txt_path = os.path.join(output_dir, f'{filename}.txt')
+    with open(txt_path, 'w', encoding='utf-8') as f:
+        f.write("=" * 50 + "\n")
+        f.write("KYC 开户测试数据\n")
+        f.write("=" * 50 + "\n\n")
+        f.write(f"执行时间: {test_data['执行时间']}\n")
+        f.write(f"链路名称: {test_data['链路名称']}\n")
+        f.write(f"执行结果: {test_data['执行结果']}\n\n")
+        f.write("-" * 40 + "\n")
+        f.write("【测试账号信息】\n")
+        f.write("-" * 40 + "\n")
+        info = test_data['测试账号信息']
+        f.write(f"登录账号:   {info['登录账号']}\n")
+        f.write(f"登录密码:   {info['登录密码']}\n")
+        f.write(f"邮箱:       {info['邮箱']}\n")
+        f.write(f"审批任务ID: {info['审批任务ID']}\n")
+        f.write(f"业务类型:   {info['业务类型']}\n\n")
+        f.write("-" * 40 + "\n")
+        f.write("【步骤详情】\n")
+        f.write("-" * 40 + "\n")
+        for step in test_data["步骤详情"]:
+            status = "✅" if step["状态"] == "成功" else "❌"
+            f.write(f"  {status} {step['步骤']} ({step['脚本']})\n")
+
+    # 打印测试数据汇总（终端展示）
+    info = test_data['测试账号信息']
+    print(f"\n{'='*50}")
+    print(f"【测试数据汇总】")
+    print(f"{'='*50}")
+    print(f"  登录账号:   {info['登录账号']}")
+    print(f"  登录密码:   {info['登录密码']}")
+    print(f"  邮箱:       {info['邮箱']}")
+    print(f"  审批任务ID: {info['审批任务ID']}")
+    print(f"  业务类型:   {info['业务类型']}")
+    print(f"{'='*50}")
+
+    # 打印保存路径
+    print(f"\n{'#'*60}")
+    print(f"# 测试数据已保存")
+    print(f"{'#'*60}")
+    print(f"  文件: {txt_path}")
+
+
+def _try_import_config():
+    """尝试导入 config 模块"""
+    try:
+        import config
+        return True
+    except ImportError:
+        return False
+
+
+def _get_login_password():
+    """获取登录密码"""
+    try:
+        import config
+        return config.LOGIN_PASSWORD
+    except ImportError:
+        return ''
 
 
 def list_chains(config):

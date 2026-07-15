@@ -67,7 +67,7 @@ pip install cx_Oracle    # 数据库查询需要
 
 ```bash
 # 会员注册
-python3 sina_register.py babweb 业务1
+python3 sina_register.py 业务1
 
 # 补充资料
 python3 sina_register_buchong.py babwebyw11202607011200

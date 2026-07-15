@@ -405,20 +405,36 @@ def main():
     print("\n第二步：进入补充资料页面...")
 
     review_url = "https://e.pay.sina.com.cn/web/reviewCheck"
-    print(f"正在访问补充资料页面: {review_url}")
-    page.goto(review_url, timeout=120000)
-    page.wait_for_timeout(5000)
+    max_retries = 6          # 最大重试次数
+    retry_interval = 10     # 重试间隔（秒）
+    success = False
 
-    current_url = page.url
-    print(f"当前页面 URL: {current_url}")
+    for attempt in range(1, max_retries + 1):
+        print(f"\n--- 第 {attempt}/{max_retries} 次尝试访问补充资料页面 ---")
+        print(f"正在访问补充资料页面: {review_url}")
+        page.goto(review_url, timeout=120000)
+        page.wait_for_timeout(5000)
 
-    if "reviewCheck" in current_url:
-        success = fill_page4(page, account)
-    else:
-        print(f"\n❌ 当前页面不是补充资料页面: {current_url}")
-        print("请检查账号是否已通过审核，审核通过后才会显示补充资料页面")
-        page.screenshot(path=get_screenshot_path("not_review_page.png"), full_page=True)
-        success = False
+        current_url = page.url
+        print(f"当前页面 URL: {current_url}")
+
+        if "reviewCheck" in current_url:
+            print(f"\n✅ 成功进入补充资料页面（第 {attempt} 次尝试）")
+            success = fill_page4(page, account)
+            break
+        else:
+            print(f"\n⚠️ 当前页面不是补充资料页面: {current_url}")
+            if attempt < max_retries:
+                print(f"等待 {retry_interval} 秒后重试（审批可能尚未生效）...")
+                page.wait_for_timeout(retry_interval * 1000)
+                # 刷新登录状态，重新访问
+                print("刷新页面...")
+                page.goto("http://e.pay.sina.com.cn/console/index", timeout=30000)
+                page.wait_for_timeout(2000)
+            else:
+                print(f"\n❌ 已重试 {max_retries} 次，仍无法进入补充资料页面")
+                print("请检查账号是否已通过审批")
+                page.screenshot(path=get_screenshot_path("not_review_page.png"), full_page=True)
 
     print("\n浏览器将保持打开 10 秒...")
     page.wait_for_timeout(10000)

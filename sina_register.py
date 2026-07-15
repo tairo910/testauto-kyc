@@ -2005,8 +2005,14 @@ if __name__ == "__main__":
         print(f"命令行参数解析: input_param={input_param}, id_type=None")
     elif len(filtered_argv) > 1:
         # 可能是完整字符串或只有业务类型
-        input_param = filtered_argv[1]
-        print(f"命令行参数解析: input_param={input_param}, id_type=None")
+        arg1 = filtered_argv[1]
+        # 如果是"业务X"格式，自动补上 babweb 前缀
+        if arg1.startswith("业务"):
+            input_param = f"babweb {arg1}"
+            print(f"命令行参数解析: 检测到业务类型，自动补全 -> input_param={input_param}")
+        else:
+            input_param = arg1
+            print(f"命令行参数解析: input_param={input_param}, id_type=None")
 
     # 根据模式执行不同的流程
     if is_supplement:

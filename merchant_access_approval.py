@@ -181,19 +181,27 @@ def do_initial_check(page):
     # 步骤12: 填写风险分析与结论
     print("\n步骤12: 填写风险分析与结论")
     try:
-        result = page.evaluate('''() => {
-            const textarea = document.getElementById('firstCheck_riskAnalysisConclusion');
-            if (textarea && !textarea.disabled) {
-                textarea.value = '123';
-                textarea.dispatchEvent(new Event('input'));
-                return true;
-            }
-            return false;
-        }''')
-        if result:
+        filled = False
+
+        # 使用 Playwright 原生 fill 方法（兼容 Ant Design Form）
+        risk_textarea = page.locator('#firstCheck_riskAnalysisConclusion')
+        if risk_textarea.count() > 0 and risk_textarea.is_visible():
+            risk_textarea.click(timeout=2000)
+            risk_textarea.fill('123')
             print("  ✅ 已填写风险分析与结论：123")
-        else:
-            print("  ⚠️ 风险分析与结论输入框禁用，跳过")
+            filled = True
+
+        # 回退：通过 placeholder 查找
+        if not filled:
+            fallback_ta = page.locator('textarea[placeholder*="风险"], textarea[placeholder*="分析"]').first
+            if fallback_ta.count() > 0 and fallback_ta.is_visible():
+                fallback_ta.click(timeout=2000)
+                fallback_ta.fill('123')
+                print("  ✅ 已填写风险分析与结论（通过placeholder）：123")
+                filled = True
+
+        if not filled:
+            print("  ⚠️ 未找到风险分析与结论输入框")
     except Exception as e:
         print(f"  ⚠️ 填写风险分析与结论失败: {e}")
     
@@ -201,80 +209,43 @@ def do_initial_check(page):
     print("\n步骤13: 填写经办初审意见")
     try:
         filled = False
-        
-        # 方法1: 尝试通过label文本查找
-        result = page.evaluate('''() => {
-            const labels = document.querySelectorAll('label');
-            for (let label of labels) {
-                if (label.textContent && label.textContent.includes('经办初审')) {
-                    const inputId = label.getAttribute('for');
-                    if (inputId) {
-                        const input = document.getElementById(inputId);
-                        if (input) {
-                            input.value = '123';
-                            return true;
-                        }
-                    }
-                }
-            }
-            return false;
-        }''')
-        if result:
-            print("  ✅ [方法1] 通过label找到并填写经办初审意见：123")
+
+        # 使用 Playwright 原生 fill 方法（兼容 Ant Design Form）
+        opinion_textarea = page.locator('#firstCheck_opinion, textarea[placeholder*="初审"], textarea[placeholder*="意见"]').first
+        if opinion_textarea.count() > 0 and opinion_textarea.is_visible():
+            opinion_textarea.click(timeout=2000)
+            opinion_textarea.fill('123')
+            print("  ✅ 已填写经办初审意见：123")
             filled = True
-        
-        # 方法2: 尝试通过textarea的class或id查找
+
+        # 回退：通过 label 文本定位，用 JS 获取 for 属性后用 Playwright fill
         if not filled:
-            result = page.evaluate('''() => {
-                const textareas = document.querySelectorAll('textarea');
-                for (let ta of textareas) {
-                    if (ta.id && (ta.id.includes('opinion') || ta.id.includes('comment'))) {
-                        ta.value = '123';
-                        return true;
-                    }
-                    if (ta.className && (ta.className.includes('opinion') || ta.className.includes('comment'))) {
-                        ta.value = '123';
-                        return true;
+            for_attr = page.evaluate('''() => {
+                const labels = document.querySelectorAll('label');
+                for (const label of labels) {
+                    if (label.textContent && label.textContent.includes('经办初审')) {
+                        return label.getAttribute('for');
                     }
                 }
-                return false;
+                return null;
             }''')
-            if result:
-                print("  ✅ [方法2] 通过class/id找到并填写经办初审意见：123")
-                filled = True
-        
-        # 方法3: 尝试通过placeholder查找
+            if for_attr:
+                ta_by_label = page.locator(f'#{for_attr}')
+                if ta_by_label.count() > 0 and ta_by_label.is_visible():
+                    ta_by_label.click(timeout=2000)
+                    ta_by_label.fill('123')
+                    print(f"  ✅ 已填写经办初审意见（通过label#for={for_attr}）：123")
+                    filled = True
+
+        # 回退：查找页面上的第2个textarea（通常风险分析是第1个，经办意见是第2个）
         if not filled:
-            result = page.evaluate('''() => {
-                const textareas = document.querySelectorAll('textarea');
-                for (let ta of textareas) {
-                    if (ta.placeholder) {
-                        if (ta.placeholder.includes('经办') || ta.placeholder.includes('初审') || ta.placeholder.includes('意见')) {
-                            ta.value = '123';
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            }''')
-            if result:
-                print("  ✅ [方法3] 通过placeholder找到并填写经办初审意见：123")
+            all_tas = page.locator('textarea').all()
+            if len(all_tas) >= 2:
+                all_tas[1].click(timeout=2000)
+                all_tas[1].fill('123')
+                print("  ✅ 已填写经办初审意见（第2个textarea）：123")
                 filled = True
-        
-        # 方法4: 查找第二个textarea
-        if not filled:
-            result = page.evaluate('''() => {
-                const textareas = document.querySelectorAll('textarea');
-                if (textareas.length >= 2) {
-                    textareas[1].value = '123';
-                    return true;
-                }
-                return false;
-            }''')
-            if result:
-                print("  ✅ [方法4] 通过位置找到并填写经办初审意见：123")
-                filled = True
-        
+
         if not filled:
             print("  ⚠️ 未找到经办初审意见输入框")
     except Exception as e:
@@ -358,50 +329,64 @@ def do_initial_check(page):
         print(f"  ❌ 点击提交复核按钮失败: {e}")
         page.screenshot(path=get_screenshot_path("step14_error"), full_page=True)
     
-    # 步骤14.5: 处理审批弹窗
+    # 步骤14.5: 处理审批弹窗（确认商户需要提交的补充材料）
+    # 弹窗标题：「确认商户需要提交的补充材料」
+    # 按钮：「取消」和「确定」（红色）
+    # 注意：不填写附加信息textarea，只截图+直接点确定
     print("\n步骤14.5: 处理审批弹窗")
     try:
         page.wait_for_timeout(2000)
-        popup_selectors = ['.ant-modal-wrap', '.ant-modal-root', '.modal', '[role="dialog"]', '.dialog']
-        popup_found = False
-        for selector in popup_selectors:
-            popup = page.locator(selector).first
-            if popup.count() > 0 and popup.is_visible():
-                popup_found = True
-                print(f"  ✅ 找到弹窗: {selector}")
-                
-                # 填写弹窗中的审批意见（用 Playwright 原生 fill）
-                textarea = popup.locator('textarea')
-                ta_count = textarea.count()
-                for i in range(ta_count):
-                    ta = textarea.nth(i)
-                    try:
-                        if ta.is_visible(timeout=1000) and ta.is_enabled():
-                            ta.click(timeout=2000)
-                            ta.fill('123')
-                            print(f"  ✅ 已填写弹窗 textarea[{i}]")
-                    except:
-                        pass
-                
-                popup.screenshot(path=get_screenshot_path("step14_5_popup"))
-                submit_btn = popup.locator('button:has-text("提交")').first
-                if submit_btn.count() > 0:
-                    submit_btn.click()
-                    print("  ✅ 已点击弹窗提交按钮")
-                    page.wait_for_timeout(2000)
-                else:
-                    buttons = popup.locator('button').all()
-                    for btn in buttons:
-                        btn_text = btn.inner_text().strip()
-                        if '提交' in btn_text or '确定' in btn_text or '确认' in btn_text:
-                            btn.click()
-                            print(f"  ✅ 已点击弹窗按钮: {btn_text}")
-                            page.wait_for_timeout(2000)
-                            break
-                break
-        
-        if not popup_found:
-            print("  ⚠️ 未找到弹窗，检查是否已直接提交...")
+        popup_screenshot_path = get_screenshot_path("step14_5_popup")
+
+        # 方法1: JS 在弹窗内查找并点击「确定」按钮（最可靠，绕过遮罩层）
+        result = page.evaluate(r'''() => {
+            const popups = document.querySelectorAll('.ant-modal-wrap');
+            for (const popup of popups) {
+                if (popup.offsetParent === null) continue; // 跳过隐藏弹窗
+
+                const buttons = popup.querySelectorAll('button, .ant-btn');
+                for (const btn of buttons) {
+                    const text = (btn.textContent || btn.innerText || '').trim().replace(/\s/g, '');
+                    // 匹配「确定」（可能显示为"确 定"）
+                    if (text === '确定') {
+                        btn.click();
+                        return { success: true, buttonText: text };
+                    }
+                }
+            }
+            return { success: false };
+        }''')
+
+        if result.get('success'):
+            popup.screenshot(path=popup_screenshot_path)
+            print(f"  ✅ 已点击弹窗【确定】按钮")
+            page.wait_for_timeout(2000)
+        else:
+            # 方法2: Playwright locator + force click
+            popup_selectors = ['.ant-modal-wrap', '.ant-modal-root', '.modal', '[role="dialog"]']
+            clicked_fallback = False
+            for selector in popup_selectors:
+                popup = page.locator(selector).last
+                if popup.count() > 0 and popup.is_visible():
+                    popup.screenshot(path=popup_screenshot_path)
+                    print(f"  ✅ 找到弹窗: {selector}")
+
+                    # 尝试多种按钮文本匹配
+                    for keyword in ['确定', '提交', '确认']:
+                        try:
+                            btn = popup.locator(f'button:has-text("{keyword}")').first
+                            if btn.count() > 0:
+                                btn.click(force=True, timeout=3000)
+                                print(f"  ✅ 已强制点击弹窗按钮: [{keyword}]")
+                                clicked_fallback = True
+                                break
+                        except:
+                            pass
+                    if clicked_fallback:
+                        break
+
+            if not clicked_fallback:
+                print("  ⚠️ 未找到弹窗或弹窗内无确定按钮")
             page.screenshot(path=get_screenshot_path("step14_5_no_popup"), full_page=True)
     
     except Exception as e:
@@ -1079,15 +1064,15 @@ def login_guardian(username, password, target_id):
                 except:
                     pass
             else:
-                print("\n登录流程已完成，浏览器将保持打开状态...")
-                while True:
-                    try:
-                        if page:
-                            page.wait_for_timeout(5000)
-                        else:
-                            break
-                    except:
-                        break
+                print("\n登录流程已完成，按回车键关闭浏览器...")
+                try:
+                    input()
+                except:
+                    page.wait_for_timeout(10000)
+                try:
+                    browser.close()
+                except:
+                    pass
 
 def main():
     args = parse_args()
